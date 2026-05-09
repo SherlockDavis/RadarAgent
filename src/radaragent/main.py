@@ -135,6 +135,14 @@ def main() -> None:
     args = parser.parse_args()
 
     # Windows console defaults to cp936/GBK and would mojibake the UTF-8 LLM output.
+    # Two-sided fix: switch the console's code page to 65001 (UTF-8) AND tell Python
+    # to encode its stdout/stderr as UTF-8. Either one alone is insufficient.
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleOutputCP(65001)
+        kernel32.SetConsoleCP(65001)
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() != "utf-8":
             stream.reconfigure(encoding="utf-8", errors="replace")
