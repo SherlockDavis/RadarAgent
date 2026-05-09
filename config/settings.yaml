@@ -1,0 +1,27 @@
+llm:
+  provider: openai
+  filter_model: gpt-4o-mini
+  digest_model: gpt-4o
+  api_key: ${OPENAI_API_KEY}
+
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+
+storage:
+  type: chroma
+  chroma:
+    persist_directory: ./data/chroma
+
+plugins:
+  - id: hn-frontpage
+    type: rss
+    config:
+      urls:
+        - https://hnrss.org/frontpage
+      schedule: "*/30 * * * *"
+      default_language: en
+
+output:
+  digest_schedule: "0 8 * * *"
+  notifiers: []

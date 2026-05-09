@@ -14,5 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pre-commit configuration (ruff / mypy / commitlint)
 - GitHub Actions CI workflow scaffold
 - Local SSH commit signing configuration
+- Phase 1 MVP source layout: `src/radaragent/` package
+- Data models: `RawArticle`, `ProcessedArticle`
+- `SourcePlugin` base class + plugin registry
+- `RSSPlugin` (generic RSS / Atom reader)
+- `LLMProvider` base + `OpenAILLMProvider` (score, digest, embed)
+- `PluginScheduler` (APScheduler-backed, cron triggers, error isolation)
+- Config loader with `${VAR}` env-var expansion (pydantic-validated)
+- Default `config/settings.yaml` + `config/interests.yaml` + `.env.example`
+- CLI entry: `radaragent` with `--once` smoke mode
 
 [Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD

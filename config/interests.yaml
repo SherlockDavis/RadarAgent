@@ -1,0 +1,20 @@
+profile: |
+  我对软件工程、分布式系统、LLM 应用与基础设施特别感兴趣。
+  关注 Rust / Python 生态、向量数据库、async runtime 与 RAG 技术。
+  对加密货币和 NFT 不感兴趣。
+
+keywords_boost:
+  - rust
+  - vector database
+  - RAG
+  - LLM
+  - distributed systems
+
+keywords_ignore:
+  - crypto
+  - NFT
+  - blockchain
+
+output_language: zh
+min_relevance_score: 6
+max_articles_per_digest: 15
