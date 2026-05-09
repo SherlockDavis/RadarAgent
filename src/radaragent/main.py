@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -132,6 +133,11 @@ def main() -> None:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
     )
     args = parser.parse_args()
+
+    # Windows console defaults to cp936/GBK and would mojibake the UTF-8 LLM output.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() != "utf-8":
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     logging.basicConfig(
         level=args.log_level,
