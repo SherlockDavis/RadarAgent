@@ -73,11 +73,25 @@ def load_interests(path: str | Path) -> InterestsConfig:
 
 def _read_yaml_with_env(path: str | Path) -> dict[str, Any]:
     text = Path(path).read_text(encoding="utf-8")
-    expanded = _ENV_PATTERN.sub(_replace_env_var, text)
-    data = yaml.safe_load(expanded) or {}
+    data = yaml.safe_load(text) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a YAML mapping at the top level")
-    return data
+    return _expand_env_vars(data)
+
+
+def _expand_env_vars(value: Any) -> Any:
+    """Recursively replace ${VAR} in string leaves with the env var value.
+
+    Operating on parsed YAML (rather than the raw file text) means commented-
+    out templates do not trigger lookups for env vars that don't exist.
+    """
+    if isinstance(value, str):
+        return _ENV_PATTERN.sub(_replace_env_var, value)
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(v) for v in value]
+    return value
 
 
 def _replace_env_var(match: re.Match[str]) -> str:
