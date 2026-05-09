@@ -1,10 +1,12 @@
 llm:
-  provider: openai
-  filter_model: gpt-4o-mini
-  digest_model: gpt-4o
-  api_key: ${OPENAI_API_KEY}
+  provider: openai                  # 复用 OpenAI 兼容客户端
+  filter_model: deepseek-v4-flash       # 过滤评分，便宜
+  digest_model: deepseek-v4-flash       # 简报生成（想更强可换 deepseek-v4-pro）
+  api_key: ${DEEPSEEK_API_KEY}
+  base_url: https://api.deepseek.com
 
 embedding:
+  # DeepSeek 没有 embedding API；Phase 2 启用 RAG 时再配 OpenAI / 本地模型
   provider: openai
   model: text-embedding-3-small
 
