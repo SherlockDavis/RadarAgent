@@ -24,6 +24,49 @@ plugins:
       schedule: "*/30 * * * *"
       default_language: en
 
+  # 取消注释下面任意一段即可启用对应插件。
+  # 多源会被调度器并行抓取（互不阻塞，单源失败不影响其他）。
+
+  # # 直接用 HN Firebase API（比 hnrss 元数据更丰富：score / comments / author）
+  # - id: hn-top
+  #   type: hackernews
+  #   config:
+  #     feed: top                      # top | new | best
+  #     limit: 30
+  #     schedule: "*/30 * * * *"
+
+  # # 学术：arXiv 按 category 订阅最新提交
+  # - id: arxiv-ml-nlp
+  #   type: arxiv
+  #   config:
+  #     categories: [cs.LG, cs.CL]
+  #     max_results: 30
+  #     schedule: "0 */6 * * *"
+
+  # # 金融：SEC EDGAR 公司 filings（CIK 在 https://www.sec.gov/cgi-bin/browse-edgar 查）
+  # - id: sec-bigtech
+  #   type: sec_edgar
+  #   config:
+  #     ciks: ["0000320193", "0001318605"]   # Apple, Tesla
+  #     user_agent: "RadarAgent your@email.com"
+  #     max_per_company: 5
+  #     schedule: "0 */4 * * *"
+
+  # # 通用 JSON-over-HTTP：YAML 配置就能接很多 API，不需要写代码
+  # - id: example-api
+  #   type: http_api
+  #   config:
+  #     url: https://api.example.com/articles
+  #     headers: {Authorization: "Bearer ${API_TOKEN}"}
+  #     params: {limit: 30}
+  #     json_path: data.items
+  #     field_mapping:
+  #       title: title
+  #       url: link
+  #       content: summary
+  #       timestamp: published_at
+  #     schedule: "0 */2 * * *"
+
 output:
   digest_schedule: "0 8 * * *"
   notifiers: []
