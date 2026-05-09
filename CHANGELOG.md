@@ -31,7 +31,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Mojibake on Windows when printing LLM-generated non-ASCII summaries.
-  `main.py` now reconfigures `sys.stdout` / `sys.stderr` to UTF-8 at
-  startup so cp936/GBK consoles display Chinese correctly.
+  `main.py` now reconfigures `sys.stdout` / `sys.stderr` to UTF-8 and
+  switches the Windows console code page to 65001 at startup so
+  cp936/GBK consoles display Chinese correctly. (PyCharm's pseudo-
+  terminal still requires `PYTHONIOENCODING=utf-8` in Run config.)
+
+### Phase 2a — Multi-source data extension
+
+- `HTTPAPIPlugin` (generic JSON-over-HTTP plugin, fully YAML-driven —
+  configure URL / headers / params / json_path / field_mapping)
+- Example plugins under `src/radaragent/plugins/examples/`:
+  - `HackerNewsPlugin` — official HN Firebase API, multi-step fetch,
+    exposes score / comments / author
+  - `ArxivPlugin` — arXiv Atom API by category (cs.LG, cs.CL, ...)
+  - `SECEdgarPlugin` — SEC EDGAR submissions JSON, requires
+    `User-Agent` header and CIK list
+- Plugin registry expanded to include all four new types
+- `config/settings.yaml` enriched with commented templates showing how
+  to enable each plugin type
 
 [Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD
