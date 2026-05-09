@@ -24,4 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default `config/settings.yaml` + `config/interests.yaml` + `.env.example`
 - CLI entry: `radaragent` with `--once` smoke mode
 
+### Changed
+- Default LLM provider switched to DeepSeek (OpenAI-compatible API,
+  cheaper). `settings.yaml` now references `${DEEPSEEK_API_KEY}` and
+  sets `base_url: https://api.deepseek.com`.
+
+### Fixed
+- Mojibake on Windows when printing LLM-generated non-ASCII summaries.
+  `main.py` now reconfigures `sys.stdout` / `sys.stderr` to UTF-8 at
+  startup so cp936/GBK consoles display Chinese correctly.
+
 [Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD
