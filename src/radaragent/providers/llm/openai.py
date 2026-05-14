@@ -43,13 +43,11 @@ class OpenAILLMProvider(LLMProvider):
         api_key: str,
         filter_model: str = "gpt-4o-mini",
         digest_model: str = "gpt-4o",
-        embedding_model: str = "text-embedding-3-small",
         base_url: str | None = None,
     ) -> None:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self.filter_model = filter_model
         self.digest_model = digest_model
-        self.embedding_model = embedding_model
 
     async def score_and_summarize(
         self,
@@ -109,13 +107,6 @@ class OpenAILLMProvider(LLMProvider):
             temperature=0.5,
         )
         return (response.choices[0].message.content or "").strip()
-
-    async def embed(self, text: str) -> list[float]:
-        response = await self._client.embeddings.create(
-            model=self.embedding_model,
-            input=text,
-        )
-        return list(response.data[0].embedding)
 
 
 def _parse_json_payload(raw: str | None) -> dict[str, Any]:

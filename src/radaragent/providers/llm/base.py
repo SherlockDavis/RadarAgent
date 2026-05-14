@@ -8,8 +8,11 @@ from radaragent.storage import ProcessedArticle, RawArticle
 class LLMProvider(ABC):
     """Unified LLM interface so the rest of the system is provider-agnostic.
 
-    A concrete provider (OpenAI, Anthropic, local model, ...) implements all
-    three calls. The processor layer talks only to this interface.
+    Concrete providers (OpenAI, Anthropic, local model, ...) implement
+    scoring + digest generation. Embeddings are handled separately by
+    ``EmbeddingProvider`` because not every LLM vendor exposes embeddings
+    (DeepSeek doesn't) and users frequently want a local embedding model
+    paired with a cloud chat model.
     """
 
     @abstractmethod
@@ -31,7 +34,3 @@ class LLMProvider(ABC):
         context: list[ProcessedArticle],
     ) -> str:
         """Generate a digest from today's articles + historical RAG context."""
-
-    @abstractmethod
-    async def embed(self, text: str) -> list[float]:
-        """Return an embedding vector for ``text``."""
