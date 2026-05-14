@@ -26,8 +26,12 @@ class LLMConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
-    provider: str = "openai"
-    model: str = "text-embedding-3-small"
+    provider: str = "local"  # local | openai
+    model: str = "BAAI/bge-m3"
+    device: str | None = None  # cuda | mps | cpu | None (auto-detect)
+    dedup_threshold: float = 0.92
+    api_key: str | None = None  # only used when provider=openai
+    base_url: str | None = None
 
 
 class StorageConfig(BaseModel):

@@ -20,7 +20,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    # Phase 1 dependencies — adjust as the project grows
+    # Phase 1 — core runtime
     "aiohttp>=3.9",
     "apscheduler>=3.10",
     "feedparser>=6.0",
@@ -28,11 +28,28 @@ dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
+    # Phase 2b — persistence (Chroma vector store)
+    "chromadb>=0.5",
 ]
 
 [project.optional-dependencies]
+# Local embedding model (~2.3GB bge-m3 + ~1.5GB torch). Install with:
+#   pip install -e ".[local-embed]"
+# Then for CUDA, replace torch with the cu121 wheel:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
+# transformers<4.50 cap: 4.50 backported CVE-2025-32434, hard-requiring
+# torch>=2.6 OR safetensors-on-main to load weights via torch.load. BAAI/bge-m3
+# only ships pytorch_model.bin on its main HF ref, so the modern stack errors
+# out. Pinning to the pre-CVE line keeps the local path working without forcing
+# a 2.5GB torch re-download. To use a newer transformers, upgrade torch first:
+#   pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu124
+local-embed = [
+    "sentence-transformers>=2.7,<4",
+    "transformers<4.50",
+    "huggingface-hub<0.30",
+    "torch>=2.2",
+]
 anthropic = ["anthropic>=0.25"]
-chroma = ["chromadb>=0.5"]
 qdrant = ["qdrant-client>=1.9"]
 telegram = ["python-telegram-bot>=21.0"]
 dev = [
@@ -91,7 +108,13 @@ disallow_untyped_defs = true
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = ["feedparser.*", "apscheduler.*"]
+module = [
+    "feedparser.*",
+    "apscheduler.*",
+    "chromadb.*",
+    "sentence_transformers.*",
+    "torch.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

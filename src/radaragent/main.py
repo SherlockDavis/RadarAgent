@@ -11,10 +11,15 @@ from dotenv import load_dotenv
 
 from radaragent.config import InterestsConfig, Settings, load_interests, load_settings
 from radaragent.plugins import SourcePlugin, build_plugin
+from radaragent.providers.embedding import (
+    EmbeddingProvider,
+    LocalEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+)
 from radaragent.providers.llm.base import LLMProvider
 from radaragent.providers.llm.openai import OpenAILLMProvider
 from radaragent.scheduler import PluginScheduler
-from radaragent.storage import RawArticle
+from radaragent.storage import DedupChecker, RAGStore, RawArticle
 
 logger = logging.getLogger(__name__)
 
@@ -25,20 +30,49 @@ def _build_llm_provider(settings: Settings) -> LLMProvider:
             api_key=settings.llm.api_key,
             filter_model=settings.llm.filter_model,
             digest_model=settings.llm.digest_model,
-            embedding_model=settings.embedding.model,
             base_url=settings.llm.base_url,
         )
     raise ValueError(f"Phase 1 only supports llm.provider='openai', got {settings.llm.provider!r}")
+
+
+def _build_embedding_provider(settings: Settings) -> EmbeddingProvider:
+    cfg = settings.embedding
+    if cfg.provider == "local":
+        return LocalEmbeddingProvider(model_name=cfg.model, device=cfg.device)
+    if cfg.provider == "openai":
+        if not cfg.api_key:
+            raise ValueError(
+                "embedding.provider=openai requires embedding.api_key in settings.yaml"
+            )
+        return OpenAIEmbeddingProvider(api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url)
+    raise ValueError(f"unknown embedding.provider={cfg.provider!r}")
+
+
+def _build_rag_store(settings: Settings) -> RAGStore:
+    persist_dir = settings.storage.chroma.get("persist_directory", "./data/chroma")
+    return RAGStore(persist_directory=persist_dir)
 
 
 def _build_plugins(settings: Settings) -> list[SourcePlugin]:
     return [build_plugin(p.type, p.id, p.config) for p in settings.plugins]
 
 
-def _build_sink(llm: LLMProvider, interests: InterestsConfig):
-    """Sink: score each fetched article and print kept ones to the console."""
+def _build_sink(
+    llm: LLMProvider,
+    embedder: EmbeddingProvider,
+    store: RAGStore,
+    dedup: DedupChecker,
+    interests: InterestsConfig,
+):
+    """Sink chain: URL dedup → score → batch embed → vector dedup → store → print.
+
+    URL dedup runs first so we don't pay the LLM cost for articles we've
+    already seen. Vector dedup is cheaper than the LLM call but still costs
+    an embedding inference per kept article, so it runs only after the
+    relevance filter.
+    """
     threshold = interests.min_relevance_score
-    semaphore = asyncio.Semaphore(4)  # cap concurrent LLM calls
+    semaphore = asyncio.Semaphore(4)
 
     async def score_one(article: RawArticle):
         async with semaphore:
@@ -53,12 +87,49 @@ def _build_sink(llm: LLMProvider, interests: InterestsConfig):
     async def sink(plugin: SourcePlugin, articles: list[RawArticle]) -> None:
         if not articles:
             return
-        results = await asyncio.gather(*(score_one(a) for a in articles))
-        kept = [r for r in results if r is not None and r.relevance_score >= threshold]
-        kept.sort(key=lambda r: r.relevance_score, reverse=True)
 
-        print(f"\n=== {plugin.plugin_id}: {len(kept)}/{len(articles)} kept (>= {threshold}) ===")
-        for r in kept:
+        # URL-level dedup: drop articles already in the store before scoring.
+        fresh = [a for a in articles if not store.has_url(a.url)]
+        url_skipped = len(articles) - len(fresh)
+
+        results = await asyncio.gather(*(score_one(a) for a in fresh))
+        kept = [r for r in results if r is not None and r.relevance_score >= threshold]
+
+        semantic_dups = 0
+        stored: list = []  # ProcessedArticle, with is_duplicate possibly set
+        if kept:
+            content_texts = [r.raw.content[:4000] or r.raw.title for r in kept]
+            summary_texts = [r.summary or r.raw.title for r in kept]
+            content_vecs = await embedder.embed_batch(content_texts)
+            summary_vecs = await embedder.embed_batch(summary_texts)
+
+            # Check + store sequentially so the second article in a batch can
+            # be flagged as a duplicate of the first if they happen to be
+            # near-identical (common when one event hits multiple feeds).
+            for r, cv, sv in zip(kept, content_vecs, summary_vecs, strict=True):
+                result = dedup.check(r.raw.url, cv)
+                r.is_duplicate = result.is_duplicate
+                store.add(r, cv, sv)
+                if result.is_duplicate:
+                    semantic_dups += 1
+                    logger.info(
+                        "duplicate (%s, sim=%.3f): %s",
+                        result.reason,
+                        result.similarity,
+                        r.raw.title,
+                    )
+                else:
+                    stored.append(r)
+
+        stored.sort(key=lambda r: r.relevance_score, reverse=True)
+        stats = store.stats()
+        print(
+            f"\n=== {plugin.plugin_id}: {len(stored)} new "
+            f"(fetched={len(articles)}, url_dups={url_skipped}, "
+            f"low_score={len(fresh) - len(kept)}, semantic_dups={semantic_dups}, "
+            f"db_size={stats['content']}) ==="
+        )
+        for r in stored:
             print(
                 f"[{r.relevance_score:.1f}] {r.raw.title}\n"
                 f"  {r.key_insight}\n"
@@ -76,8 +147,11 @@ async def _run(once: bool, settings_path: Path, interests_path: Path) -> None:
         raise SystemExit("no plugins configured in settings.yaml")
 
     llm = _build_llm_provider(settings)
+    embedder = _build_embedding_provider(settings)
+    store = _build_rag_store(settings)
+    dedup = DedupChecker(store=store, threshold=settings.embedding.dedup_threshold)
     plugins = _build_plugins(settings)
-    scheduler = PluginScheduler(sink=_build_sink(llm, interests))
+    scheduler = PluginScheduler(sink=_build_sink(llm, embedder, store, dedup, interests))
     for plugin in plugins:
         scheduler.register(plugin)
 
