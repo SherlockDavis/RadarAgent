@@ -65,9 +65,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Sherlock/RadarAgent"
-Repository = "https://github.com/Sherlock/RadarAgent"
-Issues = "https://github.com/Sherlock/RadarAgent/issues"
+Homepage = "https://github.com/SherlockDavis/RadarAgent"
+Repository = "https://github.com/SherlockDavis/RadarAgent"
+Issues = "https://github.com/SherlockDavis/RadarAgent/issues"
 
 [project.scripts]
 radaragent = "radaragent.main:main"
