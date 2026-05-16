@@ -5,12 +5,16 @@ import asyncio
 import logging
 import signal
 import sys
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from getpass import getpass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from radaragent.config import InterestsConfig, Settings, load_interests, load_settings
-from radaragent.plugins import SourcePlugin, build_plugin
+from radaragent.config import Settings, load_settings
+from radaragent.plugins import build_plugin
+from radaragent.processor import build_sink
 from radaragent.providers.embedding import (
     EmbeddingProvider,
     LocalEmbeddingProvider,
@@ -18,8 +22,15 @@ from radaragent.providers.embedding import (
 )
 from radaragent.providers.llm.base import LLMProvider
 from radaragent.providers.llm.openai import OpenAILLMProvider
+from radaragent.providers.notifier import EmailNotifier
 from radaragent.scheduler import PluginScheduler
-from radaragent.storage import DedupChecker, RAGStore, RawArticle
+from radaragent.service.digest import generate_digest
+from radaragent.service.query import run_query
+from radaragent.storage import DedupChecker, RAGStore
+from radaragent.storage.db import Database
+from radaragent.subscriptions.crud import get_subscription
+from radaragent.subscriptions.scheduling import register_digest_jobs
+from radaragent.users.auth import register
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +43,7 @@ def _build_llm_provider(settings: Settings) -> LLMProvider:
             digest_model=settings.llm.digest_model,
             base_url=settings.llm.base_url,
         )
-    raise ValueError(f"Phase 1 only supports llm.provider='openai', got {settings.llm.provider!r}")
+    raise ValueError(f"unsupported llm.provider={settings.llm.provider!r}")
 
 
 def _build_embedding_provider(settings: Settings) -> EmbeddingProvider:
@@ -41,119 +52,80 @@ def _build_embedding_provider(settings: Settings) -> EmbeddingProvider:
         return LocalEmbeddingProvider(model_name=cfg.model, device=cfg.device)
     if cfg.provider == "openai":
         if not cfg.api_key:
-            raise ValueError(
-                "embedding.provider=openai requires embedding.api_key in settings.yaml"
-            )
+            raise ValueError("embedding.provider=openai requires embedding.api_key")
         return OpenAIEmbeddingProvider(api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url)
     raise ValueError(f"unknown embedding.provider={cfg.provider!r}")
 
 
 def _build_rag_store(settings: Settings) -> RAGStore:
-    persist_dir = settings.storage.chroma.get("persist_directory", "./data/chroma")
-    return RAGStore(persist_directory=persist_dir)
+    return RAGStore(
+        persist_directory=settings.storage.chroma.get("persist_directory", "./data/chroma")
+    )
 
 
-def _build_plugins(settings: Settings) -> list[SourcePlugin]:
-    return [build_plugin(p.type, p.id, p.config) for p in settings.plugins]
+def ensure_admin_user(db: Database) -> None:
+    """First-run bootstrap: if no users exist, interactively create the admin."""
+    count = db.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if count > 0:
+        return
+    print("首次启动: 创建管理员账号")
+    email = input("邮箱: ").strip()
+    password = getpass("密码 (≥8 位): ")
+    output_language = input("输出语言 [zh]: ").strip() or "zh"
+    register(db, email, password, output_language=output_language)
+    print(f"管理员 {email} 已创建。")
 
 
-def _build_sink(
+def _make_digest_runner(
+    db: Database,
+    store: RAGStore,
     llm: LLMProvider,
     embedder: EmbeddingProvider,
-    store: RAGStore,
-    dedup: DedupChecker,
-    interests: InterestsConfig,
-):
-    """Sink chain: URL dedup → score → batch embed → vector dedup → store → print.
-
-    URL dedup runs first so we don't pay the LLM cost for articles we've
-    already seen. Vector dedup is cheaper than the LLM call but still costs
-    an embedding inference per kept article, so it runs only after the
-    relevance filter.
-    """
-    threshold = interests.min_relevance_score
-    semaphore = asyncio.Semaphore(4)
-
-    async def score_one(article: RawArticle):
-        async with semaphore:
-            try:
-                return await llm.score_and_summarize(
-                    article, interests.profile, interests.output_language
-                )
-            except Exception:
-                logger.exception("LLM scoring failed for %s", article.url)
-                return None
-
-    async def sink(plugin: SourcePlugin, articles: list[RawArticle]) -> None:
-        if not articles:
-            return
-
-        # URL-level dedup: drop articles already in the store before scoring.
-        fresh = [a for a in articles if not store.has_url(a.url)]
-        url_skipped = len(articles) - len(fresh)
-
-        results = await asyncio.gather(*(score_one(a) for a in fresh))
-        kept = [r for r in results if r is not None and r.relevance_score >= threshold]
-
-        semantic_dups = 0
-        stored: list = []  # ProcessedArticle, with is_duplicate possibly set
-        if kept:
-            content_texts = [r.raw.content[:4000] or r.raw.title for r in kept]
-            summary_texts = [r.summary or r.raw.title for r in kept]
-            content_vecs = await embedder.embed_batch(content_texts)
-            summary_vecs = await embedder.embed_batch(summary_texts)
-
-            # Check + store sequentially so the second article in a batch can
-            # be flagged as a duplicate of the first if they happen to be
-            # near-identical (common when one event hits multiple feeds).
-            for r, cv, sv in zip(kept, content_vecs, summary_vecs, strict=True):
-                result = dedup.check(r.raw.url, cv)
-                r.is_duplicate = result.is_duplicate
-                store.add(r, cv, sv)
-                if result.is_duplicate:
-                    semantic_dups += 1
-                    logger.info(
-                        "duplicate (%s, sim=%.3f): %s",
-                        result.reason,
-                        result.similarity,
-                        r.raw.title,
-                    )
-                else:
-                    stored.append(r)
-
-        stored.sort(key=lambda r: r.relevance_score, reverse=True)
-        stats = store.stats()
-        print(
-            f"\n=== {plugin.plugin_id}: {len(stored)} new "
-            f"(fetched={len(articles)}, url_dups={url_skipped}, "
-            f"low_score={len(fresh) - len(kept)}, semantic_dups={semantic_dups}, "
-            f"db_size={stats['content']}) ==="
-        )
-        for r in stored:
-            print(
-                f"[{r.relevance_score:.1f}] {r.raw.title}\n"
-                f"  {r.key_insight}\n"
-                f"  tags: {', '.join(r.tags) if r.tags else '(none)'}\n"
-                f"  url:  {r.raw.url}\n"
+    settings: Settings,
+) -> Callable[[int], Awaitable[None]]:
+    async def runner(subscription_id: int) -> None:
+        date = datetime.now(tz=UTC).date().isoformat()
+        try:
+            digest = await generate_digest(
+                db,
+                store,
+                llm,
+                embedder,
+                subscription_id,
+                date,
+                settings.digest.history_context_size,
             )
+        except Exception:
+            logger.exception("digest generation failed for sub %s", subscription_id)
+            return
+        sub = get_subscription(db, subscription_id)
+        if sub is None or settings.smtp is None:
+            return
+        notifier = EmailNotifier(settings.smtp)
+        for ch in sub.channels:
+            if ch.type == "email":
+                await notifier.send(digest.content, ch.config)
 
-    return sink
+    return runner
 
 
-async def _run(once: bool, settings_path: Path, interests_path: Path) -> None:
+async def _run(settings_path: Path, once: bool) -> None:
     settings = load_settings(settings_path)
-    interests = load_interests(interests_path)
-    if not settings.plugins:
-        raise SystemExit("no plugins configured in settings.yaml")
+    db = Database(settings.storage.sqlite_path)
+    db.init_schema()
+    ensure_admin_user(db)
 
     llm = _build_llm_provider(settings)
     embedder = _build_embedding_provider(settings)
     store = _build_rag_store(settings)
     dedup = DedupChecker(store=store, threshold=settings.embedding.dedup_threshold)
-    plugins = _build_plugins(settings)
-    scheduler = PluginScheduler(sink=_build_sink(llm, embedder, store, dedup, interests))
-    for plugin in plugins:
-        scheduler.register(plugin)
+
+    scheduler = PluginScheduler(sink=build_sink(llm, embedder, store, dedup, db))
+    for p in settings.plugins:
+        scheduler.register(build_plugin(p.type, p.id, p.config))
+
+    runner = _make_digest_runner(db, store, llm, embedder, settings)
+    register_digest_jobs(scheduler, db, runner)
 
     if once:
         await scheduler.run_once()
@@ -163,8 +135,7 @@ async def _run(once: bool, settings_path: Path, interests_path: Path) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
 
-    def _request_stop(*_args: object) -> None:
-        logger.info("shutdown signal received")
+    def _request_stop(*_a: object) -> None:
         stop.set()
 
     for sig_name in ("SIGINT", "SIGTERM"):
@@ -180,37 +151,81 @@ async def _run(once: bool, settings_path: Path, interests_path: Path) -> None:
         await stop.wait()
     finally:
         scheduler.shutdown()
+        db.close()
+
+
+def _cmd_digest(args: argparse.Namespace) -> None:
+    settings = load_settings(args.settings)
+    db = Database(settings.storage.sqlite_path)
+    db.init_schema()
+    llm = _build_llm_provider(settings)
+    embedder = _build_embedding_provider(settings)
+    store = _build_rag_store(settings)
+    date = args.date or datetime.now(tz=UTC).date().isoformat()
+    digest = asyncio.run(
+        generate_digest(
+            db,
+            store,
+            llm,
+            embedder,
+            args.subscription,
+            date,
+            settings.digest.history_context_size,
+        )
+    )
+    print(digest.content)
+    db.close()
+
+
+def _cmd_query(args: argparse.Namespace) -> None:
+    settings = load_settings(args.settings)
+    db = Database(settings.storage.sqlite_path)
+    db.init_schema()
+    llm = _build_llm_provider(settings)
+    embedder = _build_embedding_provider(settings)
+    store = _build_rag_store(settings)
+    ans = asyncio.run(run_query(db, store, llm, embedder, args.user, args.question))
+    print(ans.text)
+    db.close()
+
+
+def _cmd_useradd(args: argparse.Namespace) -> None:
+    settings = load_settings(args.settings)
+    db = Database(settings.storage.sqlite_path)
+    db.init_schema()
+    email = input("邮箱: ").strip()
+    password = getpass("密码 (≥8 位): ")
+    lang = input("输出语言 [zh]: ").strip() or "zh"
+    register(db, email, password, output_language=lang)
+    print(f"用户 {email} 已创建。")
+    db.close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="radaragent")
-    parser.add_argument(
-        "--settings",
-        type=Path,
-        default=Path("config/settings.yaml"),
-        help="path to settings.yaml",
-    )
-    parser.add_argument(
-        "--interests",
-        type=Path,
-        default=Path("config/interests.yaml"),
-        help="path to interests.yaml",
-    )
-    parser.add_argument(
-        "--once",
-        action="store_true",
-        help="fetch each plugin once and exit (smoke test)",
-    )
+    parser.add_argument("--settings", type=Path, default=Path("config/settings.yaml"))
     parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
     )
+    sub = parser.add_subparsers(dest="command")
+
+    p_run = sub.add_parser("run", help="start the 24/7 daemon")
+    p_run.add_argument("--once", action="store_true", help="single fetch pass then exit")
+
+    p_dig = sub.add_parser("digest", help="generate + print one digest")
+    p_dig.add_argument("--subscription", type=int, required=True)
+    p_dig.add_argument("--date", default=None, help="YYYY-MM-DD (default today)")
+
+    p_q = sub.add_parser("query", help="one-shot RAG question")
+    p_q.add_argument("--user", type=int, required=True)
+    p_q.add_argument("question")
+
+    sub.add_parser("useradd", help="create a user")
+
     args = parser.parse_args()
 
-    # Windows console defaults to cp936/GBK and would mojibake the UTF-8 LLM output.
-    # Two-sided fix: switch the console's code page to 65001 (UTF-8) AND tell Python
-    # to encode its stdout/stderr as UTF-8. Either one alone is insufficient.
     if sys.platform == "win32":
         import ctypes
 
@@ -227,7 +242,15 @@ def main() -> None:
     )
     load_dotenv()
 
-    asyncio.run(_run(once=args.once, settings_path=args.settings, interests_path=args.interests))
+    if args.command == "digest":
+        _cmd_digest(args)
+    elif args.command == "query":
+        _cmd_query(args)
+    elif args.command == "useradd":
+        _cmd_useradd(args)
+    else:  # "run" or default
+        once = getattr(args, "once", False)
+        asyncio.run(_run(settings_path=args.settings, once=once))
 
 
 if __name__ == "__main__":
