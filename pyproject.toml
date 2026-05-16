@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "radaragent"
 version = "0.0.1"
-description = "A domain-agnostic 24/7 intelligence system framework"
+description = "A 24/7 multi-user personal intelligence web platform"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -30,6 +30,9 @@ dependencies = [
     "python-dotenv>=1.0",
     # Phase 2b — persistence (Chroma vector store)
     "chromadb>=0.5",
+    # Phase 3 — users, subscriptions, email
+    "bcrypt>=4.1",
+    "aiosmtplib>=3.0",
 ]
 
 [project.optional-dependencies]
