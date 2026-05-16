@@ -1,15 +1,17 @@
 from radaragent.config.loader import (
-    InterestsConfig,
+    AuthConfig,
+    DigestConfig,
     PluginConfig,
     Settings,
-    load_interests,
+    SMTPConfig,
     load_settings,
 )
 
 __all__ = [
-    "InterestsConfig",
+    "AuthConfig",
+    "DigestConfig",
     "PluginConfig",
+    "SMTPConfig",
     "Settings",
-    "load_interests",
     "load_settings",
 ]

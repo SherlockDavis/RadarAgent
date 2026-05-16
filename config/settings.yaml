@@ -15,6 +15,7 @@ embedding:
 
 storage:
   type: chroma
+  sqlite_path: ./data/radaragent.db
   chroma:
     persist_directory: ./data/chroma
 
@@ -70,6 +71,17 @@ plugins:
   #       timestamp: published_at
   #     schedule: "0 */2 * * *"
 
-output:
-  digest_schedule: "0 8 * * *"
-  notifiers: []
+auth:
+  session_ttl_days: 30
+
+digest:
+  history_context_size: 5         # 简报拼入的 RAG 历史上下文条数
+
+# 取消注释并通过环境变量注入凭据后启用邮件推送
+# smtp:
+#   host: smtp.gmail.com
+#   port: 587
+#   username: ${SMTP_USERNAME}
+#   password: ${SMTP_PASSWORD}
+#   use_tls: true
+#   from_addr: radaragent@example.com

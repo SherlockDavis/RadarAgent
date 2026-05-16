@@ -36,6 +36,7 @@ class EmbeddingConfig(BaseModel):
 
 class StorageConfig(BaseModel):
     type: str = "chroma"
+    sqlite_path: str = "./data/radaragent.db"
     chroma: dict[str, Any] = Field(default_factory=dict)
     qdrant: dict[str, Any] = Field(default_factory=dict)
 
@@ -50,29 +51,36 @@ class OutputConfig(BaseModel):
     notifiers: list[NotifierConfig] = Field(default_factory=list)
 
 
+class SMTPConfig(BaseModel):
+    host: str
+    port: int = 587
+    username: str
+    password: str
+    use_tls: bool = True
+    from_addr: str
+
+
+class AuthConfig(BaseModel):
+    session_ttl_days: int = 30
+
+
+class DigestConfig(BaseModel):
+    history_context_size: int = 5
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     plugins: list[PluginConfig] = Field(default_factory=list)
     output: OutputConfig = Field(default_factory=OutputConfig)
-
-
-class InterestsConfig(BaseModel):
-    profile: str
-    keywords_boost: list[str] = Field(default_factory=list)
-    keywords_ignore: list[str] = Field(default_factory=list)
-    output_language: str = "zh"
-    min_relevance_score: float = 6.0
-    max_articles_per_digest: int = 15
+    smtp: SMTPConfig | None = None
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    digest: DigestConfig = Field(default_factory=DigestConfig)
 
 
 def load_settings(path: str | Path) -> Settings:
     return Settings.model_validate(_read_yaml_with_env(path))
-
-
-def load_interests(path: str | Path) -> InterestsConfig:
-    return InterestsConfig.model_validate(_read_yaml_with_env(path))
 
 
 def _read_yaml_with_env(path: str | Path) -> dict[str, Any]:
