@@ -46,6 +46,28 @@ class PluginScheduler:
             "registered plugin %s with schedule %s", plugin.plugin_id, plugin.get_schedule()
         )
 
+    def add_digest_job(
+        self,
+        job_id: str,
+        cron: str,
+        coro_func: Callable[[int], Awaitable[None]],
+        sub_id: int,
+    ) -> None:
+        trigger = CronTrigger.from_crontab(cron)
+        self._scheduler.add_job(
+            coro_func,
+            trigger=trigger,
+            args=(sub_id,),
+            id=job_id,
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+    def remove_digest_job(self, job_id: str) -> None:
+        if self._scheduler.get_job(job_id) is not None:
+            self._scheduler.remove_job(job_id)
+
     def start(self) -> None:
         self._scheduler.start()
         logger.info("scheduler started with %d plugin(s)", len(self._plugins))

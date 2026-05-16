@@ -15,6 +15,7 @@ from radaragent.subscriptions.models import (
     SubscriptionCreate,
     SubscriptionFilter,
 )
+from radaragent.subscriptions.scheduling import register_digest_jobs, reschedule
 
 __all__ = [
     "Channel",
@@ -27,6 +28,8 @@ __all__ = [
     "list_enabled_subscriptions",
     "record_digest",
     "record_score",
+    "register_digest_jobs",
+    "reschedule",
     "scored_article_ids_for_user",
     "set_enabled",
     "todays_scored_articles",
