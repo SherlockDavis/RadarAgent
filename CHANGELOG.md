@@ -74,4 +74,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `embedding.dedup_threshold` exposed in `settings.yaml` so users can
   tune dedup aggressiveness without code changes.
 
+### Phase 3 — User-ization + backend services
+
+- `Database` — SQLite wrapper with schema for `users` / `subscriptions` /
+  `article_scores` / `digests`. Foreign keys on, idempotent `init_schema`.
+- `User` model + bcrypt auth: `register` (first user becomes admin,
+  ≥8-char password, unique email) / `authenticate`. In-memory
+  `SessionStore` (token TTL, persistence seam for a future SQLite store).
+- `Subscription` pydantic models with cron-expression and `min_score`
+  range validation; `Channel` and `SubscriptionFilter`. Full DAO:
+  create / get / list-enabled / enable-toggle / score upsert /
+  digest upsert / per-user scored-article-id lookup.
+- Per-subscription scoring sink (`radaragent.processor.build_sink`):
+  articles are embedded + dedup-stored once globally, then scored once
+  per enabled subscription with that subscription's interest profile;
+  the `article_scores` primary key prevents re-scoring a known pair.
+- `ServiceAPI` facade: `generate_digest` (today's scored articles +
+  RAG history context, idempotent per `(subscription, date)`) and
+  `query` (RAG Q&A scoped to the user's own scored articles).
+  `search` is a Phase 4 placeholder. Added `LLMProvider.answer` and
+  `RAGStore.get_metadata`.
+- `Notifier` ABC + `EmailNotifier` (aiosmtplib); failures are logged
+  and return `False` so one bad channel cannot abort a digest job.
+- Scheduler gains per-subscription cron digest jobs alongside plugin
+  fetch jobs; `register_digest_jobs` / `reschedule`.
+- CLI restructured into subcommands: `run` (24/7 daemon, the primary
+  path), `digest`, `query`, `useradd`. First daemon start with an empty
+  `users` table interactively bootstraps the admin account.
+
+### Changed (Phase 3)
+
+- Config: removed `InterestsConfig` / `load_interests`; added
+  `SMTPConfig`, `AuthConfig`, `DigestConfig`, and
+  `storage.sqlite_path`. `settings.yaml` no longer carries interests.
+- Scoring logic moved out of `main.py` into `radaragent.processor`.
+- New dependencies: `bcrypt>=4.1`, `aiosmtplib>=3.0`.
+
+### Removed (Phase 3)
+
+- `config/interests.yaml` — interests are now per-subscription in the
+  database, edited via the Web UI (Phase 4) or `useradd` bootstrap.
+
 [Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD
