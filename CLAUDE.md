@@ -1,111 +1,140 @@
 # RadarAgent
 
-一个领域无关的 24 小时情报系统框架。给定一组数据源、一份用户兴趣描述和一个推送渠道，它持续抓取多语言信息、由 LLM 过滤打分、构建可语义检索的知识库，并按计划生成简报推送给用户。
+一个 24 小时跑在云端的**个人情报 Web 平台**。用户在浏览器里配置自己关心的领域、信息源、推送方式，系统持续抓取多语言信息、由 LLM 过滤打分、构建可语义检索的知识库，并按订阅规则推送简报、回答用户随时的提问。
 
-无论关注技术、金融、学术、行业新闻还是其他领域，资讯都分散在多个平台、多种语言中。RadarAgent 通过插件化数据源、可配置的兴趣 profile、可替换的 LLM 与推送 Provider，让用户用一份配置就能搭起自己的领域 radar。
+无论关注技术、金融、学术、行业新闻还是其他领域，资讯都分散在多个平台、多种语言中。RadarAgent 让用户在一个 Web 界面里管理多条情报订阅、收推送、做问答，把碎片化信息流变成可查询、可对话的私人知识库。
 
-本项目是**框架**，不是面向特定领域的成品。所有领域特性以插件、配置或 profile 形式接入；核心代码不假设任何特定领域。
+**RadarAgent 是产品；其底层的插件 / Provider / Notifier 抽象在架构上可以被当框架复用。** 产品是主，框架是副产品。
 
-详细设计见 `docs/superpowers/specs/2026-05-09-radaragent-redesign-design.md`。
+## 与"消息推送机器人"的区别
+
+- 飞书 / Telegram bot + RSS 脚本 = **dumb pipe**：你发指令、它转消息
+- RadarAgent = **smart agent**：它 24/7 主动观察、过滤、连接历史、生成洞察；你订阅 + 问答即可
 
 ## 核心架构
 
-5 层数据流 + 1 层服务接口：
+8 层数据流：
 
 ```
-1. 数据源层（Plugin System）             抓取
-2. 调度层（Parallel Scheduler）          并行 / 隔离 / 重试
-3. 处理层（Filter + Translate + Score）  LLMProvider 抽象
-4. RAG 知识库层（Vector Store）          长期记忆
-5. 服务接口层（Internal API）            简报 / 检索 / 订阅
-        ▲          ▲          ▲
-   Telegram Bot   CLI    Web UI（Phase 5）
-        ↑ 通过 Notifier Provider 抽象推送
+1. 数据源层（Plugin System）            抓取
+2. 调度层（Parallel Scheduler）         并行 / 隔离 / 重试
+3. 处理层（Filter + Translate + Score） LLMProvider 抽象，per-subscription 评分
+4. RAG 知识库层（Vector Store）         全局文章 + per-user score / summary
+5. 用户与订阅层（User + Subscription）  谁要什么样的信息以什么频率到什么渠道
+6. 服务接口层（ServiceAPI）             generate_digest / query / search
+7. Web 应用层（FastAPI + HTML/JS）      登录、订阅管理、Dashboard、问答、检索
+8. 推送层（Notifier）                   Email（MVP）+ 未来 飞书 / Telegram / Webhook
 ```
-
-Telegram Bot / CLI / 未来 Web UI 都是 ServiceAPI 的消费者，不直接耦合 RAG 或处理层。
 
 ## 核心抽象
 
-可扩展性建立在三组契约上：
-
-**SourcePlugin**：数据源插件基类。
-- `fetch() -> list[RawArticle]` 抓取数据
-- `get_schedule() -> str` 返回 cron 表达式
-
-新增数据源 = 实现 `SourcePlugin` + 在 settings.yaml 注册，不改动调度器或下游。
+**SourcePlugin**（已有）：数据源插件基类，`fetch() -> list[RawArticle]` + `get_schedule() -> str`。
 
 **数据模型**：
-- `RawArticle`：title / url / content / source / language / timestamp / metadata
-- `ProcessedArticle`：raw + relevance_score (0-10) + summary + tags + key_insight + is_duplicate
+- `RawArticle`（已有）：title / url / content / source / language / timestamp / metadata
+- `ProcessedArticle`（已有）：raw + relevance_score + summary + tags + key_insight + is_duplicate
+- `User`（新）：id / email / password_hash / created_at / output_language
+- `Subscription`（新）：id / user_id / name / interest_profile / filter（keywords_boost/ignore, min_score, source_whitelist）/ schedule（cron）/ channels（list of {type, config}）/ format（digest | alert | summary）
 
-`summary` 的语言由 `output_language` 配置决定，不写死。
+文章在 RAG 全局存一份，**评分 + 摘要按 (article_id, subscription_id) 维度存**——同一篇 HN 文章对不同订阅可以打不同分。
 
-**LLMProvider**：LLM 调用统一接口，避免厂商锁定。
-- `score_and_summarize(article, profile, output_language) -> ProcessedArticle` 一次完成评分 + 翻译 + 摘要 + 标签
-- `generate_digest(articles, context) -> str` 生成简报
-- `embed(text) -> list[float]` 向量化
+**LLMProvider**（已有）：score_and_summarize / generate_digest / 不再含 embed（已迁移）。
 
-默认实现 `OpenAILLMProvider`。预留 Anthropic、本地模型、其他兼容 API。
+**EmbeddingProvider**（已有）：local（bge-m3）/ openai。
 
-**Notifier**：推送渠道统一接口。`send(content, channel_config) -> bool`。默认 Telegram，Phase 3 内置 Email + Webhook（Slack / Discord 通过 Webhook 通用支持）。
+**Notifier**（Phase 4 引入）：`send(content, channel_config) -> bool`。MVP 实现 EmailNotifier。
 
-**ServiceAPI**：服务接口层暴露的内部 API，所有消费者共享。
-- `generate_digest(date)` 简报生成
-- `query(question)` RAG 问答
-- `search(filters)` 过滤检索
-
-新增消费者（如 Web UI）只调 ServiceAPI，不触碰 RAG / 处理层 / 调度层。
+**ServiceAPI**（Phase 3 引入）：
+- `generate_digest(subscription_id, date)` 按订阅生成简报
+- `query(user_id, question)` 在用户的 RAG 范围内问答
+- `search(user_id, filters)` 过滤检索
 
 ## 数据流细节
 
-**调度层**：APScheduler 或 asyncio。每个 plugin 独立调度互不阻塞，单源失败不影响其他源（错误隔离 + 自动重试），支持运行时动态增减。所有抓取结果写统一 raw queue。
+**调度层**：APScheduler 多 job —— 每个插件按自己 cron 抓取（全局，所有用户共享抓取结果）；每个订阅按 `Subscription.schedule` 跑简报 job（per-user / per-subscription）。
 
-**处理层**：LLM prompt 一次完成四件事——相关性评分（基于 `interests.yaml` 的自然语言 profile + keywords_boost/ignore）、目标语言摘要、标签提取、去重判断。score >= `min_relevance_score` 的内容进 RAG 和简报。
+**处理层**：每条新文章 × 每个订阅 → LLM 评分一次（per-subscription profile 拼进 prompt）。低分丢弃，高分入该订阅的 per-user RAG 视图。
 
-**RAG 层**：原文与摘要分别 embedding（原文向量语义更准，摘要向量支持目标语言查询）。metadata 存 source / tags / score / timestamp / url / language。开发用 Chroma，生产可换 Qdrant / Milvus。
+**Web 层**：FastAPI + 原生 HTML/JS，Jinja2 模板，session cookie 鉴权。MVP 页面：
+- `/login` `/register` 认证
+- `/` Dashboard：我的订阅列表 + 最近简报
+- `/subscriptions/new` 创建订阅
+- `/digest/{subscription_id}/{date}` 简报详情
+- `/ask` 问答（POST /api/query）
+- `/search` 检索
 
-**输出**：被动推送（按 `digest_schedule` cron 通过所有配置的 Notifier 发送简报）+ 主动查询（Telegram Bot / CLI 通过 ServiceAPI 问答）。
-
-## 插件体系
-
-**核心通用插件**（`src/plugins/`）：
-- `RSSPlugin` 通用 RSS / Atom 读取器
-- `HTTPAPIPlugin` 通用 REST API 抓取器（配 endpoint / 鉴权 / JSON 路径）
-
-**多领域示例插件**（`src/plugins/examples/`）：
-
-| 领域 | 插件 | 数据源 |
-|---|---|---|
-| 科技 | `HackerNewsPlugin` | HN API |
-| 综合 | `GitHubTrendingPlugin` | GitHub Trending |
-| 学术 | `ArxivPlugin` | arXiv API |
-| 金融 | `SECEdgarPlugin` | SEC EDGAR |
-| 社区 | `RedditPlugin` | Reddit API |
-
-`plugins[*].type` 字符串通过显式注册表绑定到实现类。新增插件类型 = 实现 + 注册一行。
+**推送层**：daemon 内 scheduler 跑 digest job → `ServiceAPI.generate_digest()` → 遍历订阅的 channels → `EmailNotifier.send()`。
 
 ## 配置体系
 
-**`config/settings.yaml`**：LLM provider / embedding / storage / plugins 列表 / output（含 digest_schedule + notifiers 数组）。完整字段见 spec 文档。
+**系统级配置 `config/settings.yaml`**：LLM provider / embedding / storage / plugins / SMTP / 全局 schedule 默认值。**不再含 interests**——兴趣描述移到数据库的 `Subscription.interest_profile`，由 Web UI 编辑。
 
-**`config/interests.yaml`**：
+**用户级配置**：数据库 `users` + `subscriptions` 表。
 
-```yaml
-profile: |
-  我是一名关注东南亚商业机会的早期投资人。
-  重点关注：印尼/越南/菲律宾市场的金融科技、电商、物流领域早期公司融资动态。
-  不关心二级市场和加密货币。
+**首次部署引导**：第一次启动时如果 `users` 表为空，命令行让你创建管理员账号（你自己）。之后通过 Web 管理。
 
-keywords_boost: [Series A, 印尼, GoTo]
-keywords_ignore: [crypto, NFT]
+## 插件体系
 
-output_language: zh
-min_relevance_score: 6
-max_articles_per_digest: 15
+**核心通用插件**（`src/plugins/`，已有）：RSSPlugin + HTTPAPIPlugin。
+
+**示例插件**（`src/plugins/examples/`，已有）：HackerNews / arXiv / SEC EDGAR。
+
+新增插件类型 = 实现 SourcePlugin + 在注册表加一行（保持框架特性）。
+
+## 项目结构
+
+```
+RadarAgent/
+├── .github/                  PR / Issue 模板 + workflows/ci.yml
+├── config/                   settings.yaml + 部署默认值
+├── docs/                     plugins.md + providers.md + superpowers/specs/
+├── src/radaragent/
+│   ├── plugins/              base.py + rss.py + http_api.py + examples/
+│   ├── scheduler/            scheduler.py
+│   ├── processor/            llm_filter.py + dedup.py
+│   ├── providers/            llm/ + embedding/ + notifier/
+│   ├── storage/              rag.py + models.py + db.py（用户/订阅持久化）
+│   ├── users/                models + auth + sessions
+│   ├── subscriptions/        models + crud + scheduler_integration
+│   ├── service/              api.py（ServiceAPI）+ digest.py + query.py
+│   ├── web/                  app.py + routes/ + templates/ + static/
+│   └── main.py               daemon 入口
+├── tests/
+├── pyproject.toml
+├── Dockerfile + docker-compose.yaml
+└── ... (Git/CI 配套不变)
 ```
 
-LLM 在打分时直接把 `profile` 段拼进 prompt。框架领域无关，不预设 `tech_stack` / `domains` 等结构化领域字段。
+## 技术栈
+
+Python 3.11+ / asyncio + aiohttp / APScheduler / **FastAPI + uvicorn / Jinja2** / OpenAI 兼容（含 DeepSeek） / sentence-transformers (bge-m3) / Chroma / **SQLite（用户/订阅持久化，部署简单）** / **bcrypt（密码哈希）** / aiosmtplib（邮件）/ Docker / PyYAML + pydantic / pyproject.toml + uv 或 pip。
+
+## 开发计划
+
+**Phase 1 MVP**（已完成）：SourcePlugin + RSSPlugin + OpenAILLMProvider + 调度器 + 控制台输出。
+
+**Phase 2 多源 + 存储 + Provider**（已完成）：HTTPAPIPlugin + 5 个示例插件 + Chroma RAG + 去重 + EmbeddingProvider 抽象。
+
+**Phase 3 用户化重构 + 后端服务**：User / Subscription 数据模型 + SQLite 持久化 + 认证（注册/登录/session）+ ServiceAPI（digest + query）+ scheduler 改造为 per-subscription job + EmailNotifier。后端就绪，CLI 可触发。
+
+**Phase 4 Web 应用 + 部署**：FastAPI 集成（登录 / Dashboard / 订阅管理 / 简报详情 / 问答 / 检索 6 个页面）+ Dockerfile + docker-compose + VPS 部署文档 + Caddy/Nginx 反代。**此时 v0.1.0 → main**。
+
+**Phase 5 生产化**：Anthropic LLMProvider 备选 + 监控告警 + pre-commit 完整启用 + 性能优化（batch embedding / 缓存）+ 运行时插件管理。
+
+**Phase 6 扩展通道**：飞书 / Telegram / Webhook Notifier + 实时告警类订阅（不是按日 cron，而是 fetch hit 立刻推）+ Web 视觉打磨 / 暗黑模式 / PWA。
+
+**Phase 7 多用户开放**：注册开放（目前是单账号自填）+ 资源配额 + 按 user_id 切分 RAG（已经在架构里预埋）+ 多语言 UI。
+
+## 关键设计原则
+
+1. **产品优先**：每个 phase 完成都该让产品体感更完整，不只是抽象更优雅
+2. **多用户架构、单用户首发**：schema 从第一天就有 user_id，但 MVP 只你一个账号
+3. **插件优先**：新数据源都是 plugin 文件，不改核心
+4. **故障隔离**：单源挂掉不影响整体；一个用户的订阅挂掉不影响其他用户
+5. **成本控制**：抓取共享（一篇 HN 不抓 N 次），评分按订阅独立（per-subscription 模型可便宜可贵）
+6. **多语言友好**：原文做 embedding，输出语言由用户设置决定
+7. **渐进式复杂度**：每个 phase 独立可运行
+8. **Provider 抽象**：LLM、Embedding、Notifier 可替换
 
 ## Git 工作流
 
@@ -142,51 +171,3 @@ git config --global tag.gpgsign true
 GitHub 仓库开启 "Require signed commits"。
 
 **LICENSE**：MIT。源文件可选加 SPDX 头：`# SPDX-License-Identifier: MIT`。
-
-## 项目结构
-
-```
-RadarAgent/
-├── .github/                  PR / Issue 模板 + workflows/ci.yml
-├── config/                   settings.yaml + interests.yaml
-├── docs/                     plugins.md + providers.md + superpowers/specs/
-├── src/
-│   ├── plugins/              base.py + rss.py + http_api.py + examples/
-│   ├── scheduler/            scheduler.py
-│   ├── processor/            llm_filter.py + dedup.py
-│   ├── providers/            llm/{base,openai,anthropic}.py + notifier/{base,telegram,email,webhook}.py
-│   ├── storage/              rag.py + models.py
-│   ├── service/              api.py（ServiceAPI）
-│   ├── output/               digest.py + telegram_bot.py + cli.py
-│   └── main.py
-├── tests/                    test_plugins/ + test_processor/ + test_providers/ + test_storage/
-├── pyproject.toml            依赖 + 工具配置
-├── docker-compose.yaml + Dockerfile
-└── .gitignore / .gitattributes / .editorconfig / .pre-commit-config.yaml / CHANGELOG.md / LICENSE / README.md
-```
-
-## 技术栈
-
-Python 3.11+ / asyncio + aiohttp / APScheduler / OpenAI（默认）+ Anthropic / text-embedding-3-small 或 bge-m3 / Chroma → Qdrant / python-telegram-bot + Email + Webhook / Docker Compose / PyYAML + pydantic / pyproject.toml + uv 或 pip。
-
-## 开发计划
-
-**Phase 1 MVP**：`SourcePlugin` 基类 + `RSSPlugin` + `OpenAILLMProvider` + 基础调度器 + 控制台输出。
-
-**Phase 2 多源 + 存储 + Provider**：`HTTPAPIPlugin` + 五个领域示例插件 + 并行调度 + Chroma RAG + 去重 + `AnthropicLLMProvider`。
-
-**Phase 3 服务接口 + 多渠道**：`ServiceAPI` + 简报生成 + `TelegramNotifier` + `EmailNotifier` + `WebhookNotifier` + CLI。
-
-**Phase 4 生产化**：Docker Compose + 监控告警 + pre-commit / GitHub Actions CI + 性能优化（batch embedding / 缓存）+ 运行时插件管理。
-
-**Phase 5 Web 前端**（架构已预留，本次不设计）：基于 ServiceAPI 的 Web Dashboard。
-
-## 关键设计原则
-
-1. **插件优先**：新数据源都是 plugin 文件，不改核心
-2. **故障隔离**：单源挂掉不影响整体
-3. **成本控制**：过滤用便宜模型，生成用好模型；低分内容不进 RAG
-4. **多语言友好**：原文做 embedding，输出语言由 settings 决定
-5. **渐进式复杂度**：每个 phase 独立可运行
-6. **领域无关**：核心不假设任何领域，领域特性进 plugin 或 profile
-7. **Provider 抽象**：LLM 与推送可替换，避免厂商锁定
