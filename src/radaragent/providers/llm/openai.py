@@ -108,6 +108,29 @@ class OpenAILLMProvider(LLMProvider):
         )
         return (response.choices[0].message.content or "").strip()
 
+    async def answer(self, question: str, context: list[ProcessedArticle]) -> str:
+        joined = (
+            "\n\n".join(f"- {c.summary or c.raw.title} ({c.raw.url})" for c in context)
+            or "(no context)"
+        )
+        response = await self._client.chat.completions.create(
+            model=self.digest_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Answer the user's question using only the provided "
+                    "context. Cite article titles. If the context is insufficient, "
+                    "say so.",
+                },
+                {
+                    "role": "user",
+                    "content": f"Context:\n{joined}\n\nQuestion: {question}",
+                },
+            ],
+            temperature=0.3,
+        )
+        return (response.choices[0].message.content or "").strip()
+
 
 def _parse_json_payload(raw: str | None) -> dict[str, Any]:
     if not raw:

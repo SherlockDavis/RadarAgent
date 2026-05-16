@@ -34,3 +34,7 @@ class LLMProvider(ABC):
         context: list[ProcessedArticle],
     ) -> str:
         """Generate a digest from today's articles + historical RAG context."""
+
+    @abstractmethod
+    async def answer(self, question: str, context: list[ProcessedArticle]) -> str:
+        """Answer a user question grounded in retrieved context articles."""

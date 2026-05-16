@@ -111,6 +111,19 @@ class RAGStore:
         )
         return aid
 
+    def get_metadata(self, article_id: str) -> dict[str, Any] | None:
+        """Return the summary collection's metadata for an article, with the
+        stored summary document folded in under ``summary``."""
+        got = self._summary.get(ids=[article_id], include=["metadatas", "documents"])
+        metas = got.get("metadatas") or []
+        if not metas:
+            return None
+        meta = dict(metas[0])
+        docs = got.get("documents") or []
+        if docs:
+            meta["summary"] = docs[0]
+        return meta
+
     def stats(self) -> dict[str, int]:
         return {
             "content": self._content.count(),
