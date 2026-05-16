@@ -69,12 +69,12 @@ class RAGStore:
         if count == 0:
             return []
         result = self._content.query(
-            query_embeddings=[vector],
+            query_embeddings=[vector],  # type: ignore[arg-type]
             n_results=min(top_k, count),
             include=["distances"],
         )
         ids = result.get("ids", [[]])[0]
-        distances = result.get("distances", [[]])[0] or []
+        distances = result.get("distances", [[]])[0] or []  # type: ignore[index]
         pairs: list[tuple[str, float]] = []
         for aid, dist in zip(ids, distances, strict=True):
             pairs.append((aid, 1.0 - float(dist)))
@@ -99,13 +99,13 @@ class RAGStore:
         }
         self._content.upsert(
             ids=[aid],
-            embeddings=[content_vector],
+            embeddings=[content_vector],  # type: ignore[arg-type]
             documents=[processed.raw.content[:5000]],
             metadatas=[metadata],
         )
         self._summary.upsert(
             ids=[aid],
-            embeddings=[summary_vector],
+            embeddings=[summary_vector],  # type: ignore[arg-type]
             documents=[processed.summary],
             metadatas=[metadata],
         )

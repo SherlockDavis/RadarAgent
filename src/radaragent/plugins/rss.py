@@ -80,4 +80,12 @@ def _extract_timestamp(entry: Any) -> datetime:
     parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
     if parsed_time is None:
         return datetime.now(tz=UTC)
-    return datetime(*parsed_time[:6], tzinfo=UTC)
+    return datetime(
+        parsed_time[0],
+        parsed_time[1],
+        parsed_time[2],
+        parsed_time[3],
+        parsed_time[4],
+        parsed_time[5],
+        tzinfo=UTC,
+    )

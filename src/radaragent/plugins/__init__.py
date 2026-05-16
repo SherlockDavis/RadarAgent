@@ -1,3 +1,5 @@
+from typing import Any
+
 from radaragent.plugins.base import SourcePlugin
 from radaragent.plugins.examples import ArxivPlugin, HackerNewsPlugin, SECEdgarPlugin
 from radaragent.plugins.http_api import HTTPAPIPlugin
@@ -12,7 +14,7 @@ PLUGIN_REGISTRY: dict[str, type[SourcePlugin]] = {
 }
 
 
-def build_plugin(plugin_type: str, plugin_id: str, config: dict) -> SourcePlugin:
+def build_plugin(plugin_type: str, plugin_id: str, config: dict[str, Any]) -> SourcePlugin:
     """Instantiate a SourcePlugin from a registered type."""
     try:
         cls = PLUGIN_REGISTRY[plugin_type]

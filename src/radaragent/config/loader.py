@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from pydantic import BaseModel, Field
@@ -88,7 +88,7 @@ def _read_yaml_with_env(path: str | Path) -> dict[str, Any]:
     data = yaml.safe_load(text) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a YAML mapping at the top level")
-    return _expand_env_vars(data)
+    return cast("dict[str, Any]", _expand_env_vars(data))
 
 
 def _expand_env_vars(value: Any) -> Any:

@@ -45,7 +45,10 @@ class LocalEmbeddingProvider(EmbeddingProvider):
             "Loading embedding model %s on %s (first call may be slow)", self.model_name, device
         )
         self._model = SentenceTransformer(self.model_name, device=device)
-        self._dimension = int(self._model.get_sentence_embedding_dimension())
+        dim = self._model.get_sentence_embedding_dimension()
+        if dim is None:
+            raise RuntimeError(f"model {self.model_name!r} did not report an embedding dimension")
+        self._dimension = int(dim)
         logger.info("Loaded %s (dim=%d, device=%s)", self.model_name, self._dimension, device)
         return self._model
 
