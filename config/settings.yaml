@@ -77,6 +77,14 @@ auth:
 digest:
   history_context_size: 5         # 简报拼入的 RAG 历史上下文条数
 
+web:
+  # Web 应用与 daemon 同进程同事件循环运行（`radaragent run` 即起服务）。
+  enabled: true
+  host: 0.0.0.0                    # 容器内监听，外部由 Caddy 反代
+  port: 8000
+  cookie_secure: false            # 反代终止 TLS 后改 true（cookie 仅走 HTTPS）
+  session_cookie: ra_session
+
 # 取消注释并通过环境变量注入凭据后启用邮件推送
 # smtp:
 #   host: smtp.gmail.com
