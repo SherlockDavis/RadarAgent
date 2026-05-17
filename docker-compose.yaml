@@ -1,0 +1,32 @@
+# RadarAgent VPS stack: app (daemon + web, in-process) behind Caddy
+# (automatic HTTPS). See docs/deploy.md.
+services:
+  app:
+    build: .
+    image: radaragent:latest
+    env_file: .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - RADAR_DOMAIN=${RADAR_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

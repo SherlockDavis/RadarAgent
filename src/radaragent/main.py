@@ -71,6 +71,15 @@ def ensure_admin_user(db: Database) -> None:
     count = db.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     if count > 0:
         return
+    if not sys.stdin.isatty():
+        # Detached container (`docker compose up -d`) has no TTY: don't block on
+        # input(). The first /register visitor is auto-promoted to admin, or run
+        # `radaragent useradd` in a one-off interactive container.
+        logger.warning(
+            "no users yet and stdin is not a TTY; create the admin via the "
+            "/register page or `radaragent useradd`"
+        )
+        return
     print("首次启动: 创建管理员账号")
     email = input("邮箱: ").strip()
     password = getpass("密码 (≥8 位): ")

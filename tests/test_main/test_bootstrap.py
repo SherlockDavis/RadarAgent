@@ -12,9 +12,25 @@ def test_ensure_admin_prompts_when_no_users(tmp_path, monkeypatch):
     answers = iter(["admin@x.com", "zh"])
     monkeypatch.setattr(builtins, "input", lambda *_a: next(answers))
     monkeypatch.setattr("radaragent.main.getpass", lambda *_a: "supersecret")
+    monkeypatch.setattr("radaragent.main.sys.stdin.isatty", lambda: True)
     ensure_admin_user(db)
     n = db.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     assert n == 1
+    db.close()
+
+
+def test_ensure_admin_skips_without_tty(tmp_path, monkeypatch):
+    db = Database(tmp_path / "b.db")
+    db.init_schema()
+    monkeypatch.setattr("radaragent.main.sys.stdin.isatty", lambda: False)
+
+    def boom(*_a):
+        raise AssertionError("must not prompt without a TTY")
+
+    monkeypatch.setattr(builtins, "input", boom)
+    ensure_admin_user(db)  # logs a warning, returns
+    n = db.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    assert n == 0
     db.close()
 
 
