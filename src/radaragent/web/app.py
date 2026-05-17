@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from radaragent.web.deps import RedirectException
-from radaragent.web.routers import auth, dashboard, health, subscriptions
+from radaragent.web.routers import auth, dashboard, digest, health, subscriptions
 
 if TYPE_CHECKING:
     from radaragent.web.context import WebContext
@@ -36,4 +36,5 @@ def create_app(ctx: WebContext) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(subscriptions.router)
+    app.include_router(digest.router)
     return app
