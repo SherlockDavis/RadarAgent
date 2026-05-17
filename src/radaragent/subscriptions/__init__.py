@@ -10,6 +10,7 @@ from radaragent.subscriptions.crud import (
     record_digest,
     record_score,
     scored_article_ids_for_user,
+    scored_articles_for_user,
     set_enabled,
     todays_scored_articles,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "register_digest_jobs",
     "reschedule",
     "scored_article_ids_for_user",
+    "scored_articles_for_user",
     "set_enabled",
     "todays_scored_articles",
 ]

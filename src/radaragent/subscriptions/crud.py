@@ -143,6 +143,21 @@ def todays_scored_articles(
     return list(rows)
 
 
+def scored_articles_for_user(db: Database, user_id: int) -> list[sqlite3.Row]:
+    """One row per article across the user's subscriptions, keeping the
+    highest score / its summary, newest-scored first."""
+    rows = db.connection.execute(
+        "SELECT s2.article_id, MAX(s2.relevance_score) AS relevance_score, "
+        "s2.summary, s2.tags_json, s2.key_insight, MAX(s2.scored_at) AS scored_at "
+        "FROM article_scores s2 "
+        "JOIN subscriptions sub ON sub.id = s2.subscription_id "
+        "WHERE sub.user_id = ? "
+        "GROUP BY s2.article_id ORDER BY scored_at DESC",
+        (user_id,),
+    ).fetchall()
+    return list(rows)
+
+
 def scored_article_ids_for_user(db: Database, user_id: int) -> set[str]:
     rows = db.connection.execute(
         "SELECT DISTINCT s2.article_id FROM article_scores s2 "

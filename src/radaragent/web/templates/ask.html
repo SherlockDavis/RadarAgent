@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}问答 · RadarAgent{% endblock %}
+{% block content %}
+<h1>问答</h1>
+<p class="muted">在你已评分的文章范围内提问，LLM 结合命中的上下文作答。</p>
+<form method="post" action="/ask" class="card">
+  <label for="question">问题</label>
+  <textarea id="question" name="question" required autofocus>{{ question or '' }}</textarea>
+  <button type="submit">提问</button>
+</form>
+
+{% if answer is defined %}
+  <h2>回答</h2>
+  <div class="card digest-body">{{ answer }}</div>
+  {% if sources %}
+    <p class="muted">命中来源 article_id：{{ sources|join(", ") }}</p>
+  {% endif %}
+{% endif %}
+{% endblock %}
