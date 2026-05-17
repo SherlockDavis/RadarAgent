@@ -66,6 +66,19 @@ def list_enabled_subscriptions(db: Database) -> list[Subscription]:
     return [_row_to_subscription(r) for r in rows]
 
 
+def list_subscriptions_for_user(db: Database, user_id: int) -> list[Subscription]:
+    rows = db.connection.execute(
+        "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY id",
+        (user_id,),
+    ).fetchall()
+    return [_row_to_subscription(r) for r in rows]
+
+
+def delete_subscription(db: Database, sub_id: int) -> None:
+    db.connection.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+    db.connection.commit()
+
+
 def set_enabled(db: Database, sub_id: int, enabled: bool) -> None:
     db.connection.execute(
         "UPDATE subscriptions SET enabled = ? WHERE id = ?",
@@ -162,3 +175,22 @@ def record_digest(
         ),
     )
     db.connection.commit()
+
+
+def get_digest(db: Database, subscription_id: int, date: str) -> sqlite3.Row | None:
+    row: sqlite3.Row | None = db.connection.execute(
+        "SELECT * FROM digests WHERE subscription_id = ? AND date = ?",
+        (subscription_id, date),
+    ).fetchone()
+    return row
+
+
+def recent_digests_for_user(db: Database, user_id: int, limit: int = 10) -> list[sqlite3.Row]:
+    """Latest digests across all of a user's subscriptions, newest first."""
+    rows = db.connection.execute(
+        "SELECT d.subscription_id, d.date, d.created_at, s.name AS subscription_name "
+        "FROM digests d JOIN subscriptions s ON s.id = d.subscription_id "
+        "WHERE s.user_id = ? ORDER BY d.created_at DESC LIMIT ?",
+        (user_id, limit),
+    ).fetchall()
+    return list(rows)
