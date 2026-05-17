@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-17
+
+First public release: Phases 1–4 — plugin-based ingestion, RAG, the
+user/subscription model + ServiceAPI, and the FastAPI web app with
+Docker/Caddy deployment.
+
 ### Added
 - Initial project scaffolding: CLAUDE.md, design spec, repository configuration files
 - MIT License
@@ -150,4 +156,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `jinja2>=3.1`, `python-multipart>=0.0.9`.
 - commitlint scope-enum gains `web` and `deploy`.
 
-[Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD
+[Unreleased]: https://github.com/SherlockDavis/RadarAgent/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/SherlockDavis/RadarAgent/releases/tag/v0.1.0
