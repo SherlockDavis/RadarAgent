@@ -125,7 +125,9 @@ def _seed_scored(db, store, *, url, title, score, summary):
 
 def test_search_returns_scored_articles(db, store):
     register(db, "a@b.com", "hunter2pass")
-    uid, aid = _seed_scored(db, store, url="http://x/a", title="Alpha", score=8.0, summary="about ml")
+    uid, aid = _seed_scored(
+        db, store, url="http://x/a", title="Alpha", score=8.0, summary="about ml"
+    )
     api = ServiceAPI(db=db, store=store, llm=FakeLLM(), embedder=FakeEmbedder())
 
     res = api.search(uid, SearchFilters())
