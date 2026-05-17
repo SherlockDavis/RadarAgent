@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from getpass import getpass
 from pathlib import Path
 
+import uvicorn
 from dotenv import load_dotenv
 
 from radaragent.config import Settings, load_settings
@@ -29,8 +30,10 @@ from radaragent.service.query import run_query
 from radaragent.storage import DedupChecker, RAGStore
 from radaragent.storage.db import Database
 from radaragent.subscriptions.crud import get_subscription
-from radaragent.subscriptions.scheduling import register_digest_jobs
+from radaragent.subscriptions.scheduling import register_digest_jobs, reschedule
+from radaragent.users import SessionStore
 from radaragent.users.auth import register
+from radaragent.web import WebContext, create_app
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +112,45 @@ def _make_digest_runner(
     return runner
 
 
+async def _serve_web(
+    settings: Settings,
+    db: Database,
+    store: RAGStore,
+    llm: LLMProvider,
+    embedder: EmbeddingProvider,
+    scheduler: PluginScheduler,
+    runner: Callable[[int], Awaitable[None]],
+) -> None:
+    """Serve the FastAPI app in the daemon's event loop, beside the scheduler.
+
+    Returns when uvicorn receives SIGINT/SIGTERM; the caller then tears the
+    scheduler and DB down.
+    """
+    sessions = SessionStore(ttl_days=settings.auth.session_ttl_days)
+
+    def _reschedule(subscription_id: int) -> None:
+        reschedule(scheduler, db, runner, subscription_id)
+
+    ctx = WebContext(
+        settings=settings,
+        db=db,
+        store=store,
+        llm=llm,
+        embedder=embedder,
+        sessions=sessions,
+        reschedule=_reschedule,
+    )
+    app = create_app(ctx)
+    config = uvicorn.Config(
+        app,
+        host=settings.web.host,
+        port=settings.web.port,
+        log_level=logging.getLevelName(logger.getEffectiveLevel()).lower(),
+        lifespan="on",
+    )
+    await uvicorn.Server(config).serve()
+
+
 async def _run(settings_path: Path, once: bool) -> None:
     settings = load_settings(settings_path)
     db = Database(settings.storage.sqlite_path)
@@ -132,6 +174,13 @@ async def _run(settings_path: Path, once: bool) -> None:
         return
 
     scheduler.start()
+
+    if settings.web.enabled:
+        await _serve_web(settings, db, store, llm, embedder, scheduler, runner)
+        scheduler.shutdown()
+        db.close()
+        return
+
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
 
