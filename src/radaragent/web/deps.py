@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi.templating import Jinja2Templates
 
 from radaragent.users import get_user
@@ -49,3 +49,19 @@ def require_user(request: Request) -> User:
     if user is None:
         raise RedirectException("/login")
     return user
+
+
+def set_session_cookie(response: Response, ctx: WebContext, token: str) -> None:
+    web = ctx.settings.web
+    response.set_cookie(
+        web.session_cookie,
+        token,
+        max_age=ctx.settings.auth.session_ttl_days * 86400,
+        httponly=True,
+        secure=web.cookie_secure,
+        samesite="lax",
+    )
+
+
+def clear_session_cookie(response: Response, ctx: WebContext) -> None:
+    response.delete_cookie(ctx.settings.web.session_cookie)
