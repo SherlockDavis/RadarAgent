@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}新订阅 · RadarAgent{% endblock %}
+{% block content %}
+<h1>新建订阅</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="/subscriptions" class="card">
+  <label for="name">名称</label>
+  <input id="name" name="name" required value="{{ values.name or '' }}">
+
+  <label for="interest_profile">兴趣描述（喂给 LLM 评分的 prompt）</label>
+  <textarea id="interest_profile" name="interest_profile" required>{{ values.interest_profile or '' }}</textarea>
+
+  <label for="schedule">调度 cron</label>
+  <input id="schedule" name="schedule" value="{{ values.schedule or '0 8 * * *' }}">
+
+  <label for="format">格式</label>
+  <select id="format" name="format">
+    {% for f in ["digest", "alert", "summary"] %}
+      <option value="{{ f }}" {{ "selected" if values.format == f else "" }}>{{ f }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="email_to">推送邮箱（留空用账号邮箱）</label>
+  <input id="email_to" name="email_to" type="email" value="{{ values.email_to or '' }}">
+
+  <label for="min_score">最低分 min_score（0–10）</label>
+  <input id="min_score" name="min_score" type="number" step="0.5" min="0" max="10"
+         value="{{ values.min_score or 6.0 }}">
+
+  <label for="keywords_boost">加权关键词（逗号分隔）</label>
+  <input id="keywords_boost" name="keywords_boost" value="{{ values.keywords_boost or '' }}">
+
+  <label for="keywords_ignore">忽略关键词（逗号分隔）</label>
+  <input id="keywords_ignore" name="keywords_ignore" value="{{ values.keywords_ignore or '' }}">
+
+  <label for="source_whitelist">来源白名单（逗号分隔，留空=不限）</label>
+  <input id="source_whitelist" name="source_whitelist" value="{{ values.source_whitelist or '' }}">
+
+  <button type="submit">创建</button>
+</form>
+{% endblock %}

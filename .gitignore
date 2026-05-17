@@ -65,3 +65,6 @@ Thumbs.db
 
 # OS
 *.bak
+
+# Claude Code local state (per-machine, not shared)
+.claude/

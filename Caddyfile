@@ -1,0 +1,6 @@
+# Automatic HTTPS via Let's Encrypt for $RADAR_DOMAIN.
+# Caddy resolves {$RADAR_DOMAIN} from the environment (set in .env).
+{$RADAR_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000
+}

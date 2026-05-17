@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}RadarAgent{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <span class="brand"><a href="/">RadarAgent</a></span>
+    <nav>
+      {% if user %}
+        <a href="/">Dashboard</a>
+        <a href="/subscriptions/new">新订阅</a>
+        <a href="/ask">问答</a>
+        <a href="/search">检索</a>
+        <a href="/logout">登出 ({{ user.email }})</a>
+      {% else %}
+        <a href="/login">登录</a>
+        <a href="/register">注册</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

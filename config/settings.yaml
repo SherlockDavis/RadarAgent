@@ -1,0 +1,95 @@
+llm:
+  provider: openai                  # 复用 OpenAI 兼容客户端
+  filter_model: deepseek-v4-flash       # 过滤评分，便宜
+  digest_model: deepseek-v4-flash       # 简报生成（想更强可换 deepseek-v4-pro）
+  api_key: ${DEEPSEEK_API_KEY}
+  base_url: https://api.deepseek.com
+
+embedding:
+  # 本地多语言 embedding（bge-m3, 1024-dim）。首次启动会下载 ~2.3GB 模型到
+  # ~/.cache/huggingface/。要走 OpenAI 端的话改 provider: openai 并填 api_key。
+  provider: local
+  model: BAAI/bge-m3
+  device: cuda                # cuda | mps | cpu | null(自动检测)
+  dedup_threshold: 0.92       # cosine similarity ≥ 此值即判定语义重复
+
+storage:
+  type: chroma
+  sqlite_path: ./data/radaragent.db
+  chroma:
+    persist_directory: ./data/chroma
+
+plugins:
+  - id: hn-frontpage
+    type: rss
+    config:
+      urls:
+        - https://hnrss.org/frontpage
+      schedule: "*/30 * * * *"
+      default_language: en
+
+  # 取消注释下面任意一段即可启用对应插件。
+  # 多源会被调度器并行抓取（互不阻塞，单源失败不影响其他）。
+
+  # # 直接用 HN Firebase API（比 hnrss 元数据更丰富：score / comments / author）
+  # - id: hn-top
+  #   type: hackernews
+  #   config:
+  #     feed: top                      # top | new | best
+  #     limit: 30
+  #     schedule: "*/30 * * * *"
+
+  # # 学术：arXiv 按 category 订阅最新提交
+  # - id: arxiv-ml-nlp
+  #   type: arxiv
+  #   config:
+  #     categories: [cs.LG, cs.CL]
+  #     max_results: 30
+  #     schedule: "0 */6 * * *"
+
+  # # 金融：SEC EDGAR 公司 filings（CIK 在 https://www.sec.gov/cgi-bin/browse-edgar 查）
+  # - id: sec-bigtech
+  #   type: sec_edgar
+  #   config:
+  #     ciks: ["0000320193", "0001318605"]   # Apple, Tesla
+  #     user_agent: "RadarAgent your@email.com"
+  #     max_per_company: 5
+  #     schedule: "0 */4 * * *"
+
+  # # 通用 JSON-over-HTTP：YAML 配置就能接很多 API，不需要写代码
+  # - id: example-api
+  #   type: http_api
+  #   config:
+  #     url: https://api.example.com/articles
+  #     headers: {Authorization: "Bearer ${API_TOKEN}"}
+  #     params: {limit: 30}
+  #     json_path: data.items
+  #     field_mapping:
+  #       title: title
+  #       url: link
+  #       content: summary
+  #       timestamp: published_at
+  #     schedule: "0 */2 * * *"
+
+auth:
+  session_ttl_days: 30
+
+digest:
+  history_context_size: 5         # 简报拼入的 RAG 历史上下文条数
+
+web:
+  # Web 应用与 daemon 同进程同事件循环运行（`radaragent run` 即起服务）。
+  enabled: true
+  host: 0.0.0.0                    # 容器内监听，外部由 Caddy 反代
+  port: 8000
+  cookie_secure: false            # 反代终止 TLS 后改 true（cookie 仅走 HTTPS）
+  session_cookie: ra_session
+
+# 取消注释并通过环境变量注入凭据后启用邮件推送
+# smtp:
+#   host: smtp.gmail.com
+#   port: 587
+#   username: ${SMTP_USERNAME}
+#   password: ${SMTP_PASSWORD}
+#   use_tls: true
+#   from_addr: radaragent@example.com

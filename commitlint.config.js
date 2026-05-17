@@ -18,6 +18,8 @@ module.exports = {
         "config",
         "provider",
         "service",
+        "web",
+        "deploy",
         "deps",
         "ci",
         "release",

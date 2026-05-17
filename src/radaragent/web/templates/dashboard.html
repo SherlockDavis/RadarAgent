@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · RadarAgent{% endblock %}
+{% block content %}
+<h1>我的订阅</h1>
+
+<div class="card">
+  {% if subscriptions %}
+    {% for s in subscriptions %}
+      <div class="sub-row">
+        <div>
+          <strong>{{ s.name }}</strong>
+          {% if s.enabled %}<span class="badge">启用</span>
+          {% else %}<span class="badge off">停用</span>{% endif %}
+          <div class="muted">{{ s.schedule }} · {{ s.format }} · min_score {{ s.filter.min_score }}</div>
+        </div>
+        <div>
+          <form class="inline" method="post" action="/subscriptions/{{ s.id }}/toggle">
+            <button class="secondary" type="submit">{{ "停用" if s.enabled else "启用" }}</button>
+          </form>
+          <form class="inline" method="post" action="/subscriptions/{{ s.id }}/delete"
+                onsubmit="return confirm('删除订阅 {{ s.name }}？')">
+            <button class="danger" type="submit">删除</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">还没有订阅。<a href="/subscriptions/new">创建第一个</a></p>
+  {% endif %}
+</div>
+
+<h2>最近简报</h2>
+<div class="card">
+  {% if digests %}
+    <ul class="results">
+      {% for d in digests %}
+        <li>
+          <a href="/digest/{{ d.subscription_id }}/{{ d.date }}">
+            {{ d.subscription_name }} — {{ d.date }}
+          </a>
+          <span class="muted"> · 生成于 {{ d.created_at[:19] }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">还没有生成过简报。订阅按 cron 到点会自动生成。</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "radaragent"
-version = "0.0.1"
-description = "A domain-agnostic 24/7 intelligence system framework"
+version = "0.1.0"
+description = "A 24/7 multi-user personal intelligence web platform"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -20,7 +20,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    # Phase 1 dependencies — adjust as the project grows
+    # Phase 1 — core runtime
     "aiohttp>=3.9",
     "apscheduler>=3.10",
     "feedparser>=6.0",
@@ -28,26 +28,53 @@ dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
+    # Phase 2b — persistence (Chroma vector store)
+    "chromadb>=0.5",
+    # Phase 3 — users, subscriptions, email
+    "bcrypt>=4.1",
+    "aiosmtplib>=3.0",
+    # Phase 4 — web app (FastAPI + Jinja2, served in-process with the daemon)
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
+# Local embedding model (~2.3GB bge-m3 + ~1.5GB torch). Install with:
+#   pip install -e ".[local-embed]"
+# Then for CUDA, replace torch with the cu121 wheel:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
+# transformers<4.50 cap: 4.50 backported CVE-2025-32434, hard-requiring
+# torch>=2.6 OR safetensors-on-main to load weights via torch.load. BAAI/bge-m3
+# only ships pytorch_model.bin on its main HF ref, so the modern stack errors
+# out. Pinning to the pre-CVE line keeps the local path working without forcing
+# a 2.5GB torch re-download. To use a newer transformers, upgrade torch first:
+#   pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu124
+local-embed = [
+    "sentence-transformers>=2.7,<4",
+    "transformers<4.50",
+    "huggingface-hub<0.30",
+    "torch>=2.2",
+]
 anthropic = ["anthropic>=0.25"]
-chroma = ["chromadb>=0.5"]
 qdrant = ["qdrant-client>=1.9"]
 telegram = ["python-telegram-bot>=21.0"]
 dev = [
     "ruff>=0.5",
     "mypy>=1.10",
+    "types-PyYAML>=6.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
     "pre-commit>=3.7",
+    "httpx>=0.27",
 ]
 
 [project.urls]
-Homepage = "https://github.com/Sherlock/RadarAgent"
-Repository = "https://github.com/Sherlock/RadarAgent"
-Issues = "https://github.com/Sherlock/RadarAgent/issues"
+Homepage = "https://github.com/SherlockDavis/RadarAgent"
+Repository = "https://github.com/SherlockDavis/RadarAgent"
+Issues = "https://github.com/SherlockDavis/RadarAgent/issues"
 
 [project.scripts]
 radaragent = "radaragent.main:main"
@@ -91,7 +118,13 @@ disallow_untyped_defs = true
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = ["feedparser.*", "apscheduler.*"]
+module = [
+    "feedparser.*",
+    "apscheduler.*",
+    "chromadb.*",
+    "sentence_transformers.*",
+    "torch.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
