@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}注册 · RadarAgent{% endblock %}
+{% block content %}
+<h1>注册</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="/register" class="card">
+  <label for="email">邮箱</label>
+  <input id="email" name="email" type="email" required autofocus>
+  <label for="password">密码（≥8 位）</label>
+  <input id="password" name="password" type="password" required minlength="8">
+  <label for="output_language">输出语言</label>
+  <input id="output_language" name="output_language" type="text" value="zh">
+  <button type="submit">注册</button>
+</form>
+<p class="muted">已有账号？<a href="/login">登录</a></p>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}检索 · RadarAgent{% endblock %}
+{% block content %}
+<h1>检索</h1>
+<form method="get" action="/search" class="card">
+  <label for="q">关键词（逗号分隔，命中标题或摘要）</label>
+  <input id="q" name="q" value="{{ q }}">
+  <label for="min_score">最低分</label>
+  <input id="min_score" name="min_score" type="number" step="0.5" min="0" max="10" value="{{ min_score }}">
+  <label for="source">来源包含</label>
+  <input id="source" name="source" value="{{ source }}">
+  <button type="submit">检索</button>
+</form>
+
+<h2>结果（{{ results|length }}）</h2>
+<div class="card">
+  {% if results %}
+    <ul class="results">
+      {% for r in results %}
+        <li>
+          <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title or r.article_id }}</a>
+          <span class="badge">{{ "%.1f"|format(r.relevance_score) }}</span>
+          <span class="muted"> · {{ r.source }}</span>
+          <div class="muted">{{ r.summary }}</div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">没有匹配的文章。</p>
+  {% endif %}
+</div>
+{% endblock %}

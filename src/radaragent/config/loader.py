@@ -68,6 +68,18 @@ class DigestConfig(BaseModel):
     history_context_size: int = 5
 
 
+class WebConfig(BaseModel):
+    """FastAPI server served in-process with the daemon (`radaragent run`)."""
+
+    enabled: bool = True
+    host: str = "0.0.0.0"  # bound inside the container; reverse-proxied by Caddy
+    port: int = 8000
+    # Set True when terminating TLS at the reverse proxy so the session cookie
+    # is only sent over HTTPS. Keep False for plain-HTTP local runs.
+    cookie_secure: bool = False
+    session_cookie: str = "ra_session"
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
@@ -77,6 +89,7 @@ class Settings(BaseModel):
     smtp: SMTPConfig | None = None
     auth: AuthConfig = Field(default_factory=AuthConfig)
     digest: DigestConfig = Field(default_factory=DigestConfig)
+    web: WebConfig = Field(default_factory=WebConfig)
 
 
 def load_settings(path: str | Path) -> Settings:

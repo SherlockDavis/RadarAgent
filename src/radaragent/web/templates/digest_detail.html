@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ sub.name }} {{ date }} · RadarAgent{% endblock %}
+{% block content %}
+<h1>{{ sub.name }} — {{ date }}</h1>
+<p class="muted">{{ sub.schedule }} · {{ sub.format }}</p>
+
+<form method="post" action="/digest/{{ sub.id }}/{{ date }}/run" style="margin-bottom:18px">
+  <button class="secondary" type="submit">{{ "重新生成" if content else "立即生成" }}</button>
+</form>
+
+{% if content %}
+  <div class="card digest-body">{{ content }}</div>
+  {% if sources %}
+    <h2>来源文章（{{ sources|length }}）</h2>
+    <div class="card">
+      <ul class="results">
+        {% for s in sources %}
+          <li><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+{% else %}
+  <div class="card"><p class="muted">该日期还没有简报。点上方按钮可立即生成（按订阅当天已评分的文章）。</p></div>
+{% endif %}
+{% endblock %}

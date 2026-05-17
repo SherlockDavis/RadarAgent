@@ -53,3 +53,8 @@ def authenticate(db: Database, email: str, password: str) -> User | None:
     if row is None or not verify_password(password, row["password_hash"]):
         return None
     return _row_to_user(row)
+
+
+def get_user(db: Database, user_id: int) -> User | None:
+    row = db.connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return _row_to_user(row) if row else None

@@ -115,4 +115,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config/interests.yaml` — interests are now per-subscription in the
   database, edited via the Web UI (Phase 4) or `useradd` bootstrap.
 
+### Phase 4 — Web application + deployment
+
+- FastAPI web app served **in-process** by `radaragent run` (same
+  asyncio loop as the scheduler) when `web.enabled`. `WebContext`
+  shares the daemon's DB connection, RAG store, providers and
+  in-memory `SessionStore`; a reschedule closure re-syncs digest jobs
+  on subscription edits without restarting.
+- Six pages + JSON endpoint: `/login` `/register` `/logout` auth
+  (httponly session cookie, `cookie_secure`/ttl from config), `/`
+  Dashboard (subscriptions + recent digests), `/subscriptions/new`
+  + create/toggle/delete (ownership-checked, live reschedule),
+  `/digest/{sub}/{date}` detail with on-demand generation, `/ask`
+  + `POST /api/query` RAG Q&A, `/search` filtered retrieval.
+  Jinja2 templates + a dark CSS shell; `/healthz` liveness probe.
+- `ServiceAPI.search` implemented (was the Phase 3 placeholder):
+  filters the user's scored articles by `min_score` / source /
+  keywords over `article_scores` + RAG metadata, pure-sync so it is
+  safe in the web loop. Adds `SearchResult`,
+  `crud.scored_articles_for_user`, `users.get_user`,
+  `crud.list_subscriptions_for_user` / `delete_subscription` /
+  `get_digest` / `recent_digests_for_user`.
+- `WebConfig` (enabled / host / port / cookie_secure /
+  session_cookie); `settings.yaml` gains a `web:` section.
+- Deployment: `Dockerfile` (slim, non-root, healthcheck, torch
+  excluded), `docker-compose.yaml` (app + Caddy auto-HTTPS),
+  `Caddyfile`, `.dockerignore`, `docs/deploy.md` VPS walkthrough.
+  `ensure_admin_user` no longer blocks without a TTY so detached
+  `docker compose up -d` works (first `/register` becomes admin).
+
+### Changed (Phase 4)
+
+- New dependencies: `fastapi>=0.110`, `uvicorn>=0.29`,
+  `jinja2>=3.1`, `python-multipart>=0.0.9`.
+- commitlint scope-enum gains `web` and `deploy`.
+
 [Unreleased]: https://github.com/Sherlock/RadarAgent/compare/HEAD

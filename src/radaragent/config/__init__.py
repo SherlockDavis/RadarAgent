@@ -4,6 +4,7 @@ from radaragent.config.loader import (
     PluginConfig,
     Settings,
     SMTPConfig,
+    WebConfig,
     load_settings,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "PluginConfig",
     "SMTPConfig",
     "Settings",
+    "WebConfig",
     "load_settings",
 ]
