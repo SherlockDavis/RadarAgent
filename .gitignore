@@ -45,6 +45,7 @@ coverage.xml
 !.env.example
 *.pem
 *.key
+config/settings.local.yaml
 
 # Project data
 data/
