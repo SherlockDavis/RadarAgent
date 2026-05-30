@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `AnthropicLLMProvider` — Claude-backed `LLMProvider` alternative
+  (`llm.provider: anthropic`), with Anthropic prompt caching on the
+  static scoring system prompt. DeepSeek remains the OpenAI-compatible
+  default; this adds a genuinely different vendor for redundancy.
+
 ## [0.1.0] - 2026-05-17
 
 First public release: Phases 1–4 — plugin-based ingestion, RAG, the

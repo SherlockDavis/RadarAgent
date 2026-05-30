@@ -5,6 +5,13 @@ llm:
   api_key: ${DEEPSEEK_API_KEY}
   base_url: https://api.deepseek.com
 
+  # 切换到 Anthropic Claude：把上面 llm 整段替换为下面这段
+  # provider: anthropic
+  # filter_model: claude-haiku-4-5-20251001   # 便宜，过滤评分
+  # digest_model: claude-sonnet-4-6           # 简报/问答，质量更高
+  # api_key: ${ANTHROPIC_API_KEY}
+  # （Anthropic 不需要 base_url；评分系统 prompt 已启用 prompt caching）
+
 embedding:
   # 本地多语言 embedding（bge-m3, 1024-dim）。首次启动会下载 ~2.3GB 模型到
   # ~/.cache/huggingface/。要走 OpenAI 端的话改 provider: openai 并填 api_key。
