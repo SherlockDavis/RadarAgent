@@ -21,6 +21,7 @@ from radaragent.providers.embedding import (
     LocalEmbeddingProvider,
     OpenAIEmbeddingProvider,
 )
+from radaragent.providers.llm.anthropic import AnthropicLLMProvider
 from radaragent.providers.llm.base import LLMProvider
 from radaragent.providers.llm.openai import OpenAILLMProvider
 from radaragent.providers.notifier import EmailNotifier
@@ -41,6 +42,13 @@ logger = logging.getLogger(__name__)
 def _build_llm_provider(settings: Settings) -> LLMProvider:
     if settings.llm.provider == "openai":
         return OpenAILLMProvider(
+            api_key=settings.llm.api_key,
+            filter_model=settings.llm.filter_model,
+            digest_model=settings.llm.digest_model,
+            base_url=settings.llm.base_url,
+        )
+    if settings.llm.provider == "anthropic":
+        return AnthropicLLMProvider(
             api_key=settings.llm.api_key,
             filter_model=settings.llm.filter_model,
             digest_model=settings.llm.digest_model,
